@@ -1,4 +1,3 @@
- 
 
 
 function medianTrace = applyCARtoDat(filename, nChansTotal, outputDir)
