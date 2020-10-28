@@ -86,6 +86,13 @@ function psthViewerPlot(f)
 % fprintf(1,'plot with fig %d\n', get(f,'Number'));
 myData = get(f,'UserData');
 
+nChildren = length(f.Children);
+while nChildren > 0 
+    delete(f.Children(1));
+    nChildren = length(f.Children);
+end
+
+
 % pick the right spikes
 st = myData.spikeTimes(myData.clu==myData.clusterIDs(myData.params.clusterIndex));
 
@@ -154,67 +161,90 @@ for g = 1:nGroups
 end
 
 
-% Make plots
+% Make plots - using gramm
 
-if isempty(myData.plotAxes)
-    for p = 1:3
-        subplot(3,1,p);
-        myData.plotAxes(p) = gca;
-    end
-    set(f, 'UserData', myData);
-end
 
-colors = myData.params.colors;
-% subplot(3,1,1); 
-axes(myData.plotAxes(1));
-ax1 = get(myData.plotAxes(1));
-hold off;
-if myData.params.showAllTraces
-    for g = 1:nGroups
-        plot(bins, psthSm(g,:), 'Color', colors(g,:), 'LineWidth', 2.0);
-        hold on;
-    end
-else
-    plot(bins, psthSm);
-end
-xlim(myData.params.window);
-title(['cluster ' num2str(myData.clusterIDs(myData.params.clusterIndex))]);
-xlabel('time (sec)');
-ylabel('firing rate (Hz)');
-yl = ylim();
-hold on;
-plot(myData.params.startRange*[1 1], yl, 'k--');
-plot(myData.params.stopRange*[1 1], yl, 'k--');
-makepretty;
-box off;
 
-% subplot(3,1,2);
-axes(myData.plotAxes(2));
-hold off;
+grammObj(1,1) = gramm('x',rasters,'color',myData.trGroups);
+grammObj(1,1).stat_bin('nbins',length(bins)/100,'geom','line');
+% grammObj(1,1).stat_summary('type','sem','geom','line');
+% grammObj(1,1).stat_smooth('method','eilers','lambda','auto','npoints',length(bins)/100,'geom','line');
+% grammObj(1,1).stat_density('function','pdf','kernel','normal','npoints',length(bins)/100);
 
-grObj = gramm('x',rasters,'color',myData.trGroups);
+grammObj(2,1) = gramm('x',rasters,'color',myData.trGroups);
+grammObj(2,1).geom_raster();
+grammObj.draw();
 
-grObj.geom_raster;
-grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
-% grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
-grObj.draw();
+myData.grammObj = grammObj;
+set(f,'UserData',myData)
 
-% plot(rasterX,rasterY, 'k');
+% 
+% grObj.geom_raster;
+% grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
+% % grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
+% grObj.draw();
+
+
+
+% if isempty(myData.plotAxes)
+%     for p = 1:3
+%         subplot(3,1,p);
+%         myData.plotAxes(p) = gca;
+%     end
+%     set(f, 'UserData', myData);
+% end
+
+% colors = myData.params.colors;
+% % subplot(3,1,1); 
+% axes(myData.plotAxes(1));
+% ax1 = get(myData.plotAxes(1));
+% hold off;
+% if myData.params.showAllTraces
+%     for g = 1:nGroups
+%         plot(bins, psthSm(g,:), 'Color', colors(g,:), 'LineWidth', 2.0);
+%         hold on;
+%     end
+% else
+%     plot(bins, psthSm);
+% end
 % xlim(myData.params.window);
-% ylim([0 length(myData.eventTimes)+1]);
-% ylabel('event number');
+% title(['cluster ' num2str(myData.clusterIDs(myData.params.clusterIndex))]);
 % xlabel('time (sec)');
+% ylabel('firing rate (Hz)');
+% yl = ylim();
+% hold on;
+% plot(myData.params.startRange*[1 1], yl, 'k--');
+% plot(myData.params.stopRange*[1 1], yl, 'k--');
 % makepretty;
 % box off;
-
-% subplot(3,1,3);
-axes(myData.plotAxes(3));
-hold off;
-errorbar(trGroupLabels, tuningCurve(:,1), tuningCurve(:,2), 'o-');
-xlabel('grouping variable value');
-ylabel('average firing rate (Hz)');
-makepretty;
-box off;
+% 
+% % subplot(3,1,2);
+% axes(myData.plotAxes(2));
+% hold off;
+% 
+% grObj = gramm('x',rasters,'color',myData.trGroups);
+% 
+% grObj.geom_raster;
+% grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
+% % grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
+% grObj.draw();
+% 
+% % plot(rasterX,rasterY, 'k');
+% % xlim(myData.params.window);
+% % ylim([0 length(myData.eventTimes)+1]);
+% % ylabel('event number');
+% % xlabel('time (sec)');
+% % makepretty;
+% % box off;
+% 
+% % subplot(3,1,3);
+% axes(myData.plotAxes(3));
+% hold off;
+% errorbar(trGroupLabels, tuningCurve(:,1), tuningCurve(:,2), 'o-');
+% xlabel('grouping variable value');
+% ylabel('average firing rate (Hz)');
+% makepretty;
+% box off;
 
 % drawnow;
 
