@@ -1,6 +1,6 @@
 
 
-function psthViewer(spikeTimes, clu, eventTimes, window, trGroups)
+function myPSTHViewer(spikeTimes, clu, eventTimes, window, trGroups, sortIdx)
 % function psthViewer(spikeTimes, clu, eventTimes, window, trGroups)
 %
 % Controls:
@@ -46,12 +46,23 @@ params.binSize = 0.001;
 myData.spikeTimes = spikeTimes;
 myData.clu = clu;
 
-if ~issorted(eventTimes)
-    [eventTimes, ii] = sort(eventTimes);
-    trGroups = trGroups(ii);
+if size(eventTimes,2) > size(eventTimes,1)
+    eventTimes = eventTimes';
 end
 
-myData.eventTimes = eventTimes(:);
+if nargin < 6
+    if ~issorted(eventTimes)
+        [~, ii] = sort(eventTimes(:,1));
+        eventTimes = eventTimes(ii,:);
+        trGroups = trGroups(ii);
+    end
+else
+    sortIdx = sortIdx(:);
+    eventTimes = eventTimes(sortIdx,:);
+    trGroups = trGroups(sortIdx);
+end
+
+myData.eventTimes = eventTimes;
 myData.trGroups = trGroups(:);
 myData.clusterIDs = unique(clu);
 myData.trGroupLabels = unique(myData.trGroups);
@@ -80,18 +91,21 @@ st = myData.spikeTimes(myData.clu==myData.clusterIDs(myData.params.clusterIndex)
 
 % compute everything
 %[psth, bins, rasterX, rasterY, spikeCounts] = psthRasterAndCounts(st, myData.eventTimes, myData.params.window, 0.001);
-[psth, bins, rasterX, rasterY, spikeCounts, ba] = psthAndBA(st, myData.eventTimes, myData.params.window, myData.params.binSize);
+[rasters, spikeCounts, ba, bins] = rastersAndBins(st, myData.eventTimes, myData.params.window, myData.params.binSize);
+baNaNs = isnan(ba);
+baZeros = ba;
+baZeros(baNaNs) = 0;
+
 trGroupLabels = myData.trGroupLabels;
 nGroups = myData.nGroups;
 inclRange = bins>myData.params.startRange & bins<=myData.params.stopRange;
-spikeCounts = sum(ba(:,inclRange),2)./(myData.params.stopRange-myData.params.startRange);
+spikeCounts = nansum(ba(:,inclRange),2)./(myData.params.stopRange-myData.params.startRange);
 
+% Originally smoothed data and then calcualted the mean
+% Due to NaN values we will average first and then smooth
 % PSTH smoothing filter
 gw = gausswin(round(myData.params.smoothSize*6),3);
 smWin = gw./sum(gw);
-
-% smooth ba
-baSm = conv2(smWin,1,ba', 'same')'./myData.params.binSize;
 
 % construct psth(s) and smooth it
 if myData.params.showAllTraces
@@ -100,32 +114,36 @@ if myData.params.showAllTraces
         stderr = zeros(nGroups, numel(bins));
     end
     for g = 1:nGroups
-        psthSm(g,:) = mean(baSm(myData.trGroups==trGroupLabels(g),:));
+        psthSm(g,:) = nanmean(ba(myData.trGroups==trGroupLabels(g),:));
         if myData.params.showErrorShading
-            stderr(g,:) = std(baSm)./sqrt(size(baSm,1));
+            stderr(g,:) = nanstd(ba)./sqrt(size(ba,1));
         end
     end
 else
     
-    psthSm = mean(baSm);
+    psthSm = nanmean(ba);
     if myData.params.showErrorShading
-        stderr = std(baSm)./sqrt(size(baSm,1));
-    end
-    
+        stderr = nanstd(ba)./sqrt(size(ba,1));
+    end 
 end
 
-% compute raster
-if myData.params.showAllTraces
-    [~, inds] = sort(myData.trGroups);
-    [tr,b] = find(ba(inds,:));
-else
-    [tr,b] = find(ba);
-end
-[rasterX,yy] = rasterize(bins(b));
-rasterY = yy+reshape(repmat(tr',3,1),1,length(tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
+% smooth ba
+psthSm = conv2(smWin,1,psthSm', 'same')'./myData.params.binSize;
 
-% scale the raster ticks
-rasterY(2:3:end) = rasterY(2:3:end)+myData.params.rasterScale;
+% % compute raster
+% if myData.params.showAllTraces
+%     [~, inds] = sort(myData.trGroups);
+% %     [tr,b] = find(ba(inds,:));
+%     [tr,b] = find(baZeros(inds,:));
+% else
+%     % [tr,b] = find(ba);t
+%     [tr,b] = find(baZeros);
+% end
+% [rasterX,yy] = rasterize(bins(b));
+% rasterY = yy+reshape(repmat(tr',3,1),1,length(tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
+% 
+% % scale the raster ticks
+% rasterY(2:3:end) = rasterY(2:3:end)+myData.params.rasterScale;
 
 % compute the tuning curve
 tuningCurve = zeros(nGroups,2);
@@ -149,6 +167,7 @@ end
 colors = myData.params.colors;
 % subplot(3,1,1); 
 axes(myData.plotAxes(1));
+ax1 = get(myData.plotAxes(1));
 hold off;
 if myData.params.showAllTraces
     for g = 1:nGroups
@@ -172,13 +191,21 @@ box off;
 % subplot(3,1,2);
 axes(myData.plotAxes(2));
 hold off;
-plot(rasterX,rasterY, 'k');
-xlim(myData.params.window);
-ylim([0 length(myData.eventTimes)+1]);
-ylabel('event number');
-xlabel('time (sec)');
-makepretty;
-box off;
+
+grObj = gramm('x',rasters,'color',myData.trGroups);
+
+grObj.geom_raster;
+grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
+% grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
+grObj.draw();
+
+% plot(rasterX,rasterY, 'k');
+% xlim(myData.params.window);
+% ylim([0 length(myData.eventTimes)+1]);
+% ylabel('event number');
+% xlabel('time (sec)');
+% makepretty;
+% box off;
 
 % subplot(3,1,3);
 axes(myData.plotAxes(3));
@@ -324,3 +351,81 @@ for c = 1:length(ch)
 end
 
 end
+
+
+function [rasters, spikeCounts, binnedArray, bins] = ...
+    rastersAndBins(spikeTimes, eventTimes, window, psthBinSize)
+
+    % Fast computation of psth and spike counts in a window relative to some
+    % events. Also returns rasters you can plot. 
+    %
+    % Notes on inputs:
+    % - eventTimes is nEvents x 1
+    % - window is length 2, e.g. [-0.1 0.3] for a window from -0.1 to +0.3 sec
+    % relative to events. 
+    %
+    % Notes on outputs:
+    % - psth can be plotted with plot(bins, psth);
+    % - rasters can be plotted with plot(rasterX, rasterY);
+    % - spikeCounts is nEvents x 1, where each entry is the number of spikes
+    % that occurred within the window around that event. 
+
+    spikeTimes = spikeTimes(:);
+
+    % first we'll subselect spikes that are between the end and beginning of
+    % all the ranges - in some cases this will be useless but often instead
+    % reduces spike count by a lot.
+    spikeTimes = spikeTimes(spikeTimes>min(eventTimes(:,1)+window(1)) & spikeTimes<max(eventTimes(:,1)+window(2)));
+
+    [binnedArray, bins, rasters] = timestampsToBinned(spikeTimes, eventTimes, psthBinSize, window);
+    spikeCounts = nansum(binnedArray,2);
+end % End of function rastersAndBins
+
+
+function [binArray, binCenters, rasters] = timestampsToBinned(timeStamps, referencePoints, binSize, window)
+    % [binArray, binCenters] = timestampsToBinned(timeStamps, referencePoints, binSize,
+    % window)
+    %
+    % Returns an array of binned spike counts. If you use a large enough
+    % binSize, it may well be possible that there is more than one spike in a
+    % bin, i.e. the value of some bin may be >1. 
+
+    binBorders = window(1):binSize:window(2);
+    numBins = length(binBorders)-1;
+
+    binArray = zeros(length(referencePoints), numBins);
+    rasters  = cell(1,length(referencePoints));
+
+    if size(referencePoints,2) == 2
+        % in this case there is a reference point and a second point to
+        % exclude values from
+        for r = 1:length(referencePoints)
+            [n,binCenters] = histdiff(timeStamps, referencePoints(r,1), binBorders);
+            % zero out bins that fall before/after the second reference
+            refWindow = referencePoints(r,2) - referencePoints(r,1);
+            binMatch  = dsearchn(binBorders',refWindow);
+            if refWindow < 0
+                n(1:binMatch-1) = 0;
+                rasters{r} = binCenters(logical(n));
+                n(1:binMatch-1) = nan;
+            else
+                n(binMatch+1:end) = 0;
+                rasters{r} = binCenters(logical(n));
+                n(binMatch+1:end) = nan;
+            end
+            binArray(r,:) = n;
+        end
+        
+    else
+        % The standard single reference point
+        for r = 1:length(referencePoints)
+             [n,binCenters] = histdiff(timeStamps, referencePoints(r), binBorders);
+             rasters{r} = binCenters(logical(n));
+             binArray(r,:) = n;  
+        end
+    end
+    
+
+
+
+end % End function timestamps to be binned
