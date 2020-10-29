@@ -32,8 +32,8 @@ fprintf(1, 'overall. If showing just overall, raster is sorted chronologically. 
 fprintf(1, 'showing by grouping variable, raster is sorted by that variable.\n')
 fprintf(1, '- r: select a new range within which to count spikes for the tuning curve\n')
 
-
-params.smoothSize = 15; % in msec, stdev of gaussian smoothing filter
+% Set parameters, need to update so these can be passed into the function
+params.histBinSize = 25; % in msec, width of histogram bins
 params.clusterIndex = 1;
 params.rasterScale = floor(numel(eventTimes)/100); % height of ticks
 params.window = window;
@@ -41,10 +41,10 @@ params.showAllTraces = false;
 params.showErrorShading = false;
 params.startRange = window(1);
 params.stopRange = window(2);
-params.binSize = 0.001;
+params.rasterBinSize = 0.001;
 
-myData.spikeTimes = spikeTimes;
-myData.clu = clu;
+figData.spikeTimes = spikeTimes;
+figData.clu = clu;
 
 if size(eventTimes,2) > size(eventTimes,1)
     eventTimes = eventTimes';
@@ -62,21 +62,18 @@ else
     trGroups = trGroups(sortIdx);
 end
 
-myData.eventTimes = eventTimes;
-myData.trGroups = trGroups(:);
-myData.clusterIDs = unique(clu);
-myData.trGroupLabels = unique(myData.trGroups);
-myData.nGroups = length(myData.trGroupLabels);
-myData.plotAxes = [];
+figData.eventTimes = eventTimes;
+figData.trGroups = trGroups(:);
+figData.clusterIDs = unique(clu);
+figData.trGroupLabels = unique(figData.trGroups);
+figData.nGroups = length(figData.trGroupLabels);
+figData.plotAxes = [];
 
-params.colors = copper(myData.nGroups); 
-params.colors = params.colors(:, [3 2 1]);
-
-myData.params = params;
+figData.params = params;
 
 f = figure;
 
-set(f, 'UserData', myData);
+set(f, 'UserData', figData);
 set(f, 'KeyPressFcn', @(f,k)psthViewerCallback(f, k));
 
 psthViewerPlot(f)
@@ -84,7 +81,7 @@ end
 
 function psthViewerPlot(f)
 % fprintf(1,'plot with fig %d\n', get(f,'Number'));
-myData = get(f,'UserData');
+figData = get(f,'UserData');
 
 nChildren = length(f.Children);
 while nChildren > 0 
@@ -92,134 +89,56 @@ while nChildren > 0
     nChildren = length(f.Children);
 end
 
-
 % pick the right spikes
-st = myData.spikeTimes(myData.clu==myData.clusterIDs(myData.params.clusterIndex));
+spikeTimes = figData.spikeTimes(figData.clu==figData.clusterIDs(figData.params.clusterIndex));
 
 % compute everything
-%[psth, bins, rasterX, rasterY, spikeCounts] = psthRasterAndCounts(st, myData.eventTimes, myData.params.window, 0.001);
-[rasters, spikeCounts, ba, bins] = rastersAndBins(st, myData.eventTimes, myData.params.window, myData.params.binSize);
-baNaNs = isnan(ba);
-baZeros = ba;
-baZeros(baNaNs) = 0;
+[rasters, spikeCounts, ba, bins] = ...
+    rastersAndBins(spikeTimes, figData.eventTimes, figData.params.window, figData.params.rasterBinSize);
 
-trGroupLabels = myData.trGroupLabels;
-nGroups = myData.nGroups;
-inclRange = bins>myData.params.startRange & bins<=myData.params.stopRange;
-spikeCounts = nansum(ba(:,inclRange),2)./(myData.params.stopRange-myData.params.startRange);
+trGroupLabels = figData.trGroupLabels;
+nGroups = figData.nGroups;
+inclRange = bins>figData.params.startRange & bins<=figData.params.stopRange;
+spikeCounts = nansum(ba(:,inclRange),2)./(figData.params.stopRange-figData.params.startRange);
 
-% construct psth(s) while accounting for NaN values (mean this point is
-% excluded from this trial
-if myData.params.showAllTraces
-    psthM = zeros(nGroups, numel(bins));
-    for groupI = 1:nGroups
-        psthM(groupI,:) = nanmean(ba(myData.trGroups==trGroupLabels(groupI),:)) ...
-             .* 1000; % Think this converts to hertz;
-    end
+% construct data for rasters
+if figData.params.showAllTraces  
+    rasterColors = figData.trGroups;
 else
-    psthM = nanmean(ba) .* 1000; % Think this converts to hertz
+    rasterColors = ones(size(figData.trGroups));
 end
 
+% Calculate bin size
+totalTimeInms = diff(figData.params.window) * 1000;
+nBinsfor1ms   = length(bins) ./ totalTimeInms;
+widthHistBins = nBinsfor1ms * figData.params.histBinSize;
+nBins         = floor(length(bins) / widthHistBins);
+
+
 % Make plots - using gramm
-
-
-% % PTSH option 1)
-% % Use the calculated smoothed binned data to plot spike rate
-% % Need to duplicate the date per number of groups
-% 
-% xData = []; yData = []; cData = [];
-% 
-% for groupI = 1:size(psthM,1)
-%     xData = [xData bins];
-%     yData = [yData psthM(groupI,:)];
-%     cData = [cData ones(size(bins)).*groupI];
-% end
-% 
-% grammObj(1,1) = gramm('x',xData,'y',yData,'color',cData);
-% grammObj(1,1).stat_smooth('npoints',length(bins)/50);
-% grammObj(1,1).axe_property('YLim',[min(min(psthM)) max(max(psthM))./20]);
-%  
-% PTSH option 2)
 % Use Gramms stat functions to bin the acutal rasters
-grammObj(1,1) = gramm('x',rasters,'color',myData.trGroups);
-grammObj(1,1).stat_bin('nbins',length(bins)/50,'geom','overlaid_bar','normalization','countdensity');
+grammObj(1,1) = gramm('x',rasters,'color',rasterColors);
+grammObj(1,1).stat_bin('nbins',nBins,'geom','line','normalization','countdensity');
+% grammObj(1,1).stat_smooth('npoints',100);
+% grammObj(1,1).stat_smooth('method','eilers','lambda','auto','npoints',length(bins)/100,'geom','line');
+% grammObj(1,1).stat_smooth;
 
-grammObj(2,1) = gramm('x',rasters,'color',myData.trGroups);
-grammObj(2,1).geom_raster();
+grammObj(2,1) = gramm('x',rasters,'color',rasterColors);
+grammObj(2,1).geom_raster(); %'geom','line'
+
+if ~figData.params.showAllTraces
+    grammObj(1,1).set_color_options('map',[0.3 0.3 0.3],'n_color',1,'n_lightness',1);
+    grammObj(2,1).set_color_options('map',[0.3 0.3 0.3],'n_color',1,'n_lightness',1);
+end
+
+grammObj(1,1).set_names('x','Time(s)','y','Firing Rate (Hz)','color','Trial Type');
+grammObj(2,1).set_names('x','Time(s)','y','Trial #','color','Trial Type');
+grammObj.set_title(['Cluster #' num2str(figData.params.clusterIndex)]);
 grammObj.draw();
 
-myData.grammObj = grammObj;
-set(f,'UserData',myData)
+figData.grammObj = grammObj;
 
-% 
-% grObj.geom_raster;
-% grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
-% % grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
-% grObj.draw();
-
-
-
-% if isempty(myData.plotAxes)
-%     for p = 1:3
-%         subplot(3,1,p);
-%         myData.plotAxes(p) = gca;
-%     end
-%     set(f, 'UserData', myData);
-% end
-
-% colors = myData.params.colors;
-% % subplot(3,1,1); 
-% axes(myData.plotAxes(1));
-% ax1 = get(myData.plotAxes(1));
-% hold off;
-% if myData.params.showAllTraces
-%     for g = 1:nGroups
-%         plot(bins, psthSm(g,:), 'Color', colors(g,:), 'LineWidth', 2.0);
-%         hold on;
-%     end
-% else
-%     plot(bins, psthSm);
-% end
-% xlim(myData.params.window);
-% title(['cluster ' num2str(myData.clusterIDs(myData.params.clusterIndex))]);
-% xlabel('time (sec)');
-% ylabel('firing rate (Hz)');
-% yl = ylim();
-% hold on;
-% plot(myData.params.startRange*[1 1], yl, 'k--');
-% plot(myData.params.stopRange*[1 1], yl, 'k--');
-% makepretty;
-% box off;
-% 
-% % subplot(3,1,2);
-% axes(myData.plotAxes(2));
-% hold off;
-% 
-% grObj = gramm('x',rasters,'color',myData.trGroups);
-% 
-% grObj.geom_raster;
-% grObj.set_names('x','Times (s)','y','Trial #','color','Trial Type');
-% % grObj.set_title(['Cluster #' num2str(clusterID) ' per trial response']);
-% grObj.draw();
-% 
-% % plot(rasterX,rasterY, 'k');
-% % xlim(myData.params.window);
-% % ylim([0 length(myData.eventTimes)+1]);
-% % ylabel('event number');
-% % xlabel('time (sec)');
-% % makepretty;
-% % box off;
-% 
-% % subplot(3,1,3);
-% axes(myData.plotAxes(3));
-% hold off;
-% errorbar(trGroupLabels, tuningCurve(:,1), tuningCurve(:,2), 'o-');
-% xlabel('grouping variable value');
-% ylabel('average firing rate (Hz)');
-% makepretty;
-% box off;
-
-% drawnow;
+set(f,'UserData',figData)
 
 end
 
@@ -251,10 +170,10 @@ switch keydata.Key
         updateOtherFigs = true;
         
     case 'uparrow' % increase smoothing
-        myData.params.smoothSize = myData.params.smoothSize*1.2;
+        myData.params.histBinSize = myData.params.histBinSize*1.2;
         
     case 'downarrow' % decrease smoothing
-        myData.params.smoothSize = myData.params.smoothSize/1.2;
+        myData.params.histBinSize = myData.params.histBinSize/1.2;
         
     case 'e' % whether to show standard error as shading
         myData.params.showErrorShading = ~myData.params.showErrorShading;
@@ -330,30 +249,6 @@ end
 figure(f) % return focus here
 end
 
-function makepretty()
-% set some graphical attributes of the current axis
-
-set(get(gca, 'XLabel'), 'FontSize', 17);
-set(get(gca, 'YLabel'), 'FontSize', 17);
-set(gca, 'FontSize', 13);
-
-set(get(gca, 'Title'), 'FontSize', 20);
-
-ch = get(gca, 'Children');
-
-for c = 1:length(ch)
-    thisChild = ch(c);
-    if strcmp('line', get(thisChild, 'Type'))
-        if strcmp('.', get(thisChild, 'Marker'))
-            set(thisChild, 'MarkerSize', 15);
-        end
-        if strcmp('-', get(thisChild, 'LineStyle'))
-            set(thisChild, 'LineWidth', 2.0);
-        end
-    end
-end
-
-end
 
 
 function [rasters, spikeCounts, binnedArray, bins] = ...
@@ -410,11 +305,11 @@ function [binArray, binCenters, rasters] = timestampsToBinned(timeStamps, refere
             if refWindow < 0
                 n(1:binMatch-1) = 0;
                 rasters{r} = binCenters(logical(n));
-                n(1:binMatch-1) = nan;
+               %  n(1:binMatch-1) = nan;
             else
                 n(binMatch+1:end) = 0;
                 rasters{r} = binCenters(logical(n));
-                n(binMatch+1:end) = nan;
+               %  n(binMatch+1:end) = nan;
             end
             binArray(r,:) = n;
         end
@@ -428,7 +323,4 @@ function [binArray, binCenters, rasters] = timestampsToBinned(timeStamps, refere
         end
     end
     
-
-
-
 end % End function timestamps to be binned
