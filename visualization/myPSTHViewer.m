@@ -108,68 +108,41 @@ nGroups = myData.nGroups;
 inclRange = bins>myData.params.startRange & bins<=myData.params.stopRange;
 spikeCounts = nansum(ba(:,inclRange),2)./(myData.params.stopRange-myData.params.startRange);
 
-% Originally smoothed data and then calcualted the mean
-% Due to NaN values we will average first and then smooth
-% PSTH smoothing filter
-gw = gausswin(round(myData.params.smoothSize*6),3);
-smWin = gw./sum(gw);
-
-% construct psth(s) and smooth it
+% construct psth(s) while accounting for NaN values (mean this point is
+% excluded from this trial
 if myData.params.showAllTraces
-    psthSm = zeros(nGroups, numel(bins));
-    if myData.params.showErrorShading
-        stderr = zeros(nGroups, numel(bins));
-    end
-    for g = 1:nGroups
-        psthSm(g,:) = nanmean(ba(myData.trGroups==trGroupLabels(g),:));
-        if myData.params.showErrorShading
-            stderr(g,:) = nanstd(ba)./sqrt(size(ba,1));
-        end
+    psthM = zeros(nGroups, numel(bins));
+    for groupI = 1:nGroups
+        psthM(groupI,:) = nanmean(ba(myData.trGroups==trGroupLabels(groupI),:)) ...
+             .* 1000; % Think this converts to hertz;
     end
 else
-    
-    psthSm = nanmean(ba);
-    if myData.params.showErrorShading
-        stderr = nanstd(ba)./sqrt(size(ba,1));
-    end 
+    psthM = nanmean(ba) .* 1000; % Think this converts to hertz
 end
-
-% smooth ba
-psthSm = conv2(smWin,1,psthSm', 'same')'./myData.params.binSize;
-
-% % compute raster
-% if myData.params.showAllTraces
-%     [~, inds] = sort(myData.trGroups);
-% %     [tr,b] = find(ba(inds,:));
-%     [tr,b] = find(baZeros(inds,:));
-% else
-%     % [tr,b] = find(ba);t
-%     [tr,b] = find(baZeros);
-% end
-% [rasterX,yy] = rasterize(bins(b));
-% rasterY = yy+reshape(repmat(tr',3,1),1,length(tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
-% 
-% % scale the raster ticks
-% rasterY(2:3:end) = rasterY(2:3:end)+myData.params.rasterScale;
-
-% compute the tuning curve
-tuningCurve = zeros(nGroups,2);
-for g = 1:nGroups
-    theseCounts = spikeCounts(myData.trGroups==trGroupLabels(g));
-    tuningCurve(g,1) = mean(theseCounts);
-    tuningCurve(g,2) = std(theseCounts)./sqrt(length(theseCounts));
-end
-
 
 % Make plots - using gramm
 
 
-
+% % PTSH option 1)
+% % Use the calculated smoothed binned data to plot spike rate
+% % Need to duplicate the date per number of groups
+% 
+% xData = []; yData = []; cData = [];
+% 
+% for groupI = 1:size(psthM,1)
+%     xData = [xData bins];
+%     yData = [yData psthM(groupI,:)];
+%     cData = [cData ones(size(bins)).*groupI];
+% end
+% 
+% grammObj(1,1) = gramm('x',xData,'y',yData,'color',cData);
+% grammObj(1,1).stat_smooth('npoints',length(bins)/50);
+% grammObj(1,1).axe_property('YLim',[min(min(psthM)) max(max(psthM))./20]);
+%  
+% PTSH option 2)
+% Use Gramms stat functions to bin the acutal rasters
 grammObj(1,1) = gramm('x',rasters,'color',myData.trGroups);
-grammObj(1,1).stat_bin('nbins',length(bins)/100,'geom','line');
-% grammObj(1,1).stat_summary('type','sem','geom','line');
-% grammObj(1,1).stat_smooth('method','eilers','lambda','auto','npoints',length(bins)/100,'geom','line');
-% grammObj(1,1).stat_density('function','pdf','kernel','normal','npoints',length(bins)/100);
+grammObj(1,1).stat_bin('nbins',length(bins)/50,'geom','overlaid_bar','normalization','countdensity');
 
 grammObj(2,1) = gramm('x',rasters,'color',myData.trGroups);
 grammObj(2,1).geom_raster();
