@@ -34,6 +34,7 @@ fprintf(1, '- r: select a new range within which to count spikes for the tuning 
 
 % Set parameters, need to update so these can be passed into the function
 params.histBinSize = 25; % in msec, width of histogram bins
+params.smoothSize = 15; % in msec, stdev of gaussian smoothing filter
 params.clusterIndex = 1;
 params.rasterScale = floor(numel(eventTimes)/100); % height of ticks
 params.window = window;
@@ -72,7 +73,6 @@ figData.plotAxes = [];
 figData.params = params;
 
 f = figure;
-
 set(f, 'UserData', figData);
 set(f, 'KeyPressFcn', @(f,k)psthViewerCallback(f, k));
 

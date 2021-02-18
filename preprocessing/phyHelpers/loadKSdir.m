@@ -1,5 +1,3 @@
-
-
 function spikeStruct = loadKSdir(ksDir, varargin)
 
 if ~isempty(varargin)
@@ -40,10 +38,10 @@ else
 end
 
 cgsFile = '';
-if exist(fullfile(ksDir, 'cluster_groups.csv')) 
-    cgsFile = fullfile(ksDir, 'cluster_groups.csv');
-end
-if exist(fullfile(ksDir, 'cluster_group.tsv')) 
+% if exist(fullfile(ksDir, 'cluster_groups.csv')) 
+%     cgsFile = fullfile(ksDir, 'cluster_groups.csv');
+% end
+if exist(fullfile(ksDir, 'cluster_group.tsv'),'file') 
    cgsFile = fullfile(ksDir, 'cluster_group.tsv');
 end 
 if ~isempty(cgsFile)
@@ -70,8 +68,7 @@ if ~isempty(cgsFile)
     
 else
     clu = spikeTemplates;
-    
-    cids = unique(spikeTemplates);
+    cids = unique(clu);
     cgs = 3*ones(size(cids));
 end
     
