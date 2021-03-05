@@ -1,5 +1,7 @@
 
-function [spikeAmps, spikeDepths, templateDepths, tempAmps, tempsUnW, templateDuration, waveforms] = templatePositionsAmplitudes(temps, winv, ycoords, spikeTemplates, tempScalingAmps)
+function [spikeAmps, spikeDepths, templateDepths, ...
+    tempAmps, tempsUnW, templateDuration, waveforms] = ...
+    templatePositionsAmplitudes(temps, winv, ycoords, spikeTemplates, tempScalingAmps)
 % function [spikeAmps, spikeDepths, templateDepths, tempAmps, tempsUnW, templateDuration, waveforms] = templatePositionsAmplitudes(temps, winv, ycoords, spikeTemplates, tempScalingAmps)
 %
 % Compute some basic things about spikes and templates
@@ -34,7 +36,9 @@ end
 % tempAmps = max(max(absTemps,[],3),[],2);
 
 % The amplitude on each channel is the positive peak minus the negative
-tempChanAmps = squeeze(max(tempsUnW,[],2))-squeeze(min(tempsUnW,[],2));
+[tempChanAmps, maxAmpChan] = squeeze(max(tempsUnW,[],2))-squeeze(min(tempsUnW,[],2));
+maxAmpChan = maxAmpChan - 1; % Convert to 0 indexing
+
 
 % The template amplitude is the amplitude of its largest channel (but see
 % below for true tempAmps)

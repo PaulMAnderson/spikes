@@ -15,7 +15,7 @@ spikeFeatInd = spikeStruct.pcFeatInd(spikeStruct.spikeTemplates+1,:);
 % Ycoords of those channels?
 spikeFeatYcoords = spikeStruct.ycoords(spikeFeatInd+1); % 2D matrix of size #spikes x 32?
 % Xcoords of those channels?
-spikeFeatXcoords = spikeStruct.xcoords(spikeFeatInd+1); % 2D matrix of size #spikes x 12
+spikeFeatXcoords = spikeStruct.xcoords(spikeFeatInd+1); % 2D matrix of size #spikes x 32
 
 % center of mass is sum(coords.*features)/sum(features)
 spikeDepths = sum(spikeFeatYcoords.*pcFeat.^2,2)./sum(pcFeat.^2,2);
@@ -32,7 +32,8 @@ tempChanAmps = squeeze(max(tempsUnW,[],2))-squeeze(min(tempsUnW,[],2));
 
 % The template amplitude is the amplitude of its largest channel (but see
 % below for true tempAmps)
-tempAmpsUnscaled = max(tempChanAmps,[],2);
+[tempAmpsUnscaled, maxChan] = max(tempChanAmps,[],2);
+
 
 % need to zero-out the potentially-many low values on distant channels ...
 threshVals = tempAmpsUnscaled*0.3; 
